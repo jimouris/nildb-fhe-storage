@@ -15,14 +15,24 @@ cd ./src/nildb
 python main.py --create-schema
 ```
 
-### 2) Set up [Lattigo](https://github.com/tuneinsight/lattigo)
+### 2) Set up the FHE library:
+
+#### 2.1) [Lattigo](https://github.com/tuneinsight/lattigo)
 Let's generate the FHE keys to store (this will first generate the keys and then run the FHE computation):
 ```shell
 cd ./src/lattigo
 go run bgv-main.go
 ```
 
+#### 2.2) [TFHE-rs](https://github.com/zama-ai/tfhe-rs)
+Let's generate the FHE keys to store (this will first generate the keys and then run the FHE computation):
+```shell
+cd ./src/tfhe-rs
+cargo run -r
+```
+
 ### 3) Store and retrieve keys to and from nilDB
+
 ```shell
 cd ./src/nildb
 python main.py --store-keys

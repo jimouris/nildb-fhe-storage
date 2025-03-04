@@ -11,8 +11,9 @@ from org_config import org_config
 
 # Update schema ID with your own value
 SCHEMA_ID = os.getenv("FHE_SCHEMA_ID")
-RECORD_ID = os.getenv("LATTIGO_BGV_RECORD_ID")
+RECORD_ID = os.getenv("RECORD_ID")
 LATTIGO_KEYS_DIR = "../lattigo/keys"
+TFHERS_KEYS_DIR = "../tfhe-rs/keys"
 
 
 async def create_schema():
@@ -59,17 +60,21 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
             data = {}
             with open(secret_key_filename, "r") as f:
                 secret_key = f.read()
-                # Process this in batches of 4096 bytes
+                # Process this in batches
                 data["secret_key"] = [
                     { "%allot": secret_key[i: i + 4096] }
                     for i in range(0, len(secret_key), 4096)
                 ]
             with open(public_key_filename, "r") as f:
                 public_key = f.read()
-                data["public_key"] = public_key
-            with open(params_filename, "r") as f:
-                parameters = f.read()
-                data["parameters"] = parameters
+                data["public_key"] = [
+                    public_key[i: i + 4096]
+                    for i in range(0, len(public_key), 4096)
+                ]
+            if params_filename:
+                with open(params_filename, "r") as f:
+                    parameters = f.read()
+                    data["parameters"] = parameters
 
             # Write data to nodes
             data_written = await collection.write_to_nodes([data])
@@ -105,7 +110,8 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
 
             # Write public key to file
             with open(public_key_filename, "w") as f:
-                f.write(record["public_key"])
+                public_key = "".join(record["public_key"])
+                f.write(public_key)
 
             # Combine and write secret key shares
             with open(secret_key_filename, "w") as f:
@@ -127,25 +133,50 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--create-schema', action='store_true', help='Create new schema')
     group.add_argument('--store-keys', nargs='?', type=str, const=LATTIGO_KEYS_DIR, metavar='KEY_DIR', help='Store keys to nilDB. Optionally specify key directory (default: LATTIGO_KEYS_DIR)')
-    group.add_argument('--retrieve-keys', nargs='?', const=RECORD_ID, metavar='KEY_ID', help='Retrieve keys from nilDB. Optionally specify key ID (default: uses RECORD_ID from env)')
+    group.add_argument('--retrieve-keys', nargs='?', type=str, const=LATTIGO_KEYS_DIR, metavar='KEY_DIR', help='Retrieve keys from nilDB. Optionally specify key directory (default: LATTIGO_KEYS_DIR)')
+    parser.add_argument('--record-id', type=str, help='Record ID to retrieve (required with --retrieve-keys)')
+
     args = parser.parse_args()
+
+    # Validate arguments
+    if args.record_id and not args.retrieve_keys:
+        parser.error("--record-id can only be used with --retrieve-keys")
+    if args.retrieve_keys and not args.record_id:
+        parser.error("--record-id is required when using --retrieve-keys")
 
     if args.create_schema:
         asyncio.run(create_schema())
     elif args.store_keys:
-        secret_key_filename = f"{args.store_keys}/bgv-secret-key.b64"
-        public_key_filename = f"{args.store_keys}/bgv-public-key.b64"
-        params_filename = f"{args.store_keys}/bgv-params.b64"
+        # Determine key filename based on directory
+        if "tfhe-rs" in args.store_keys:
+            print(f"📤 Storing TFHE-rs keys from directory: {args.store_keys}")
+            secret_key_filename = f"{args.store_keys}/tfhe-client-key.b64"
+            public_key_filename = f"{args.store_keys}/tfhe-server-key.b64"
+            params_filename = None
+        else:  # lattigo case
+            print(f"📤 Storing Lattigo keys from directory: {args.store_keys}")
+            secret_key_filename = f"{args.store_keys}/bgv-secret-key.b64"
+            public_key_filename = f"{args.store_keys}/bgv-public-key.b64"
+            params_filename = f"{args.store_keys}/bgv-params.b64"
+
         asyncio.run(read_write_keys(read=False, secret_key_filename=secret_key_filename,
                                   public_key_filename=public_key_filename, params_filename=params_filename))
     elif args.retrieve_keys:
-        secret_key_filename = f"{LATTIGO_KEYS_DIR}/retrieved-bgv-secret-key.b64"
-        public_key_filename = f"{LATTIGO_KEYS_DIR}/retrieved-bgv-public-key.b64"
-        params_filename = f"{LATTIGO_KEYS_DIR}/retrieved-bgv-params.b64"
+        # Determine key filename based on directory
+        if "tfhe-rs" in args.retrieve_keys:
+            print(f"📥 Retrieving TFHE-rs keys to directory: {args.retrieve_keys}")
+            secret_key_filename = f"{args.retrieve_keys}/tfhe-client-key.b64"
+            public_key_filename = f"{args.retrieve_keys}/tfhe-server-key.b64"
+            params_filename = None
+        else:  # lattigo case
+            print(f"📥 Retrieving Lattigo keys to directory: {args.retrieve_keys}")
+            secret_key_filename = f"{args.retrieve_keys}/bgv-secret-key.b64"
+            public_key_filename = f"{args.retrieve_keys}/bgv-public-key.b64"
+            params_filename = f"{args.retrieve_keys}/bgv-params.b64"
 
         asyncio.run(read_write_keys(read=True, secret_key_filename=secret_key_filename,
                                   public_key_filename=public_key_filename, params_filename=params_filename,
-                                  record_id=args.retrieve_keys))
+                                  record_id=args.record_id))
     else:
         parser.print_help()
         sys.exit(1)
