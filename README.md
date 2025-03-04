@@ -35,12 +35,18 @@ cargo run -r
 
 ```shell
 cd ./src/nildb
-python main.py --store-keys
+# For Lattigo keys
+python main.py --store-keys ../lattigo/keys
+# For TFHE-rs keys
+python main.py --store-keys ../tfhe-rs/keys
 ```
-The returned ID will look something like `6b2da249-e8bf-4f90-a7e6-93cd0cafd0a6`, keep it safe to use it later when retrieving data.
+The returned ID will look something like `8100e495-5168-40a5-be0e-91654ef6ee11`, keep it safe to use it later when retrieving data.
 
 To retrieve:
 ```shell
-python main.py --retrieve-keys 6b2da249-e8bf-4f90-a7e6-93cd0cafd0a6
+# For Lattigo keys
+python main.py --retrieve-keys ../lattigo/keys --record-id 8100e495-5168-40a5-be0e-91654ef6ee11
+# For TFHE-rs keys
+python main.py --retrieve-keys ../tfhe-rs/keys --record-id 8100e495-5168-40a5-be0e-91654ef6ee11
 ```
 Finally, go back to Lattigo and run it again, it'll find the FHE keys and not generate new ones.

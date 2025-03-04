@@ -24,6 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Basic configuration to use homomorphic integers
     let config = ConfigBuilder::default().build();
 
+    // Create keys directory if it doesn't exist
+    std::fs::create_dir_all("keys")?;
     let client_key_filename = "keys/tfhe-client-key.b64";
     let server_key_filename = "keys/tfhe-server-key.b64";
 
