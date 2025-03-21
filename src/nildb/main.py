@@ -42,7 +42,7 @@ async def create_schema():
         sys.exit(1)
 
 
-async def read_write_keys(read=False, secret_key_filename=None, public_key_filename=None, params_filename=None, record_id=None):
+async def read_write_keys(read=False, secret_key_filename=None, public_key_filename=None, params_filename=None, record_ids=None):
     """
     Main function to demonstrate writing to and reading from nodes using the SecretVaultWrapper.
     """
@@ -57,6 +57,8 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
         await collection.init()
 
         if not read:
+            max_chunk_length = (1 << 12) // 3 # Each params, secret key, and public key can occupy at most 1/3 of the max record size
+            print("Max length:", max_chunk_length)
             data = {}
             with open(secret_key_filename, "r") as f:
                 secret_key = f.read()
@@ -65,19 +67,32 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
                     { "%allot": secret_key[i: i + 4096] }
                     for i in range(0, len(secret_key), 4096)
                 ]
+                print("secret_key length:", len(secret_key))
+            print("Loaded secret key")
             with open(public_key_filename, "r") as f:
                 public_key = f.read()
                 data["public_key"] = [
                     public_key[i: i + 4096]
                     for i in range(0, len(public_key), 4096)
                 ]
+                print("public_key length:", len(public_key))
+            print("Loaded public key")
             if params_filename:
                 with open(params_filename, "r") as f:
                     parameters = f.read()
                     data["parameters"] = parameters
+                print("parameters length:", len(parameters))
+            print("Loaded parameters")
 
-            # Write data to nodes
-            data_written = await collection.write_to_nodes([data])
+
+            print([{k: len(v) for k, v in data.items()}])
+            # Split data into n chunks of max_chunk_length
+            max_data_len = max([len(v) for v in data.values()])
+            records = [{k: v[i: i + max_chunk_length] for k, v in data.items()} for i in range(0, max_data_len, max_chunk_length)]
+
+            print([{k: len(v) for k, v in record.items()} for record in records])
+            data_written = await collection.write_to_nodes(records)
+            
 
             # Extract unique created IDs from the results
             new_ids = list(
@@ -91,32 +106,43 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
             print("🔏 Created IDs:")
             print("\n".join(new_ids))
         else:
-            filter_by_id = {"_id": record_id}
-            print(f"🔍 Reading data for ID: {record_id}")
+            if not isinstance(record_ids, list):
+                record_ids = [record_ids]
 
-            # Read data from nodes
-            data_read = await collection.read_from_nodes(filter_by_id)
+            data = {}
+            for record_id in record_ids:
+                filter_by_id = {"_id": record_id}
+                print(f"🔍 Reading data for ID: {record_id}")
 
-            if len(data_read) == 0:
-                print("❌ No records found")
-                sys.exit(1)
+                # Read data from nodes
+                data_read = await collection.read_from_nodes(filter_by_id)
+                if len(data_read) == 0:
+                    print("❌ No records found")
+                    sys.exit(1)
 
-            # Get first record since we filtered by ID
-            record = data_read[0]
+                # Get first record since we filtered by ID
+                record = data_read[0]
+
+                for k, v in record.items():
+                    if k not in data:
+                        data[k] = ""
+                    data[k] += "".join(v)
+
+            print([{k: len(v) for k, v in data.items()}])
 
             # Write parameters to file
             with open(params_filename, "w") as f:
-                f.write(record["parameters"])
+                f.write(data["parameters"])
 
             # Write public key to file
             with open(public_key_filename, "w") as f:
-                public_key = "".join(record["public_key"])
+                public_key = "".join(data["public_key"])
                 f.write(public_key)
 
             # Combine and write secret key shares
             with open(secret_key_filename, "w") as f:
                 # Combine all secret key chunks into a single string
-                secret_key = "".join(record["secret_key"])
+                secret_key = "".join(data["secret_key"])
                 f.write(secret_key)
 
             print("✅ Successfully stored keys and parameters to files")
@@ -134,15 +160,15 @@ if __name__ == "__main__":
     group.add_argument('--create-schema', action='store_true', help='Create new schema')
     group.add_argument('--store-keys', nargs='?', type=str, const=LATTIGO_KEYS_DIR, metavar='KEY_DIR', help='Store keys to nilDB. Optionally specify key directory (default: LATTIGO_KEYS_DIR)')
     group.add_argument('--retrieve-keys', nargs='?', type=str, const=LATTIGO_KEYS_DIR, metavar='KEY_DIR', help='Retrieve keys from nilDB. Optionally specify key directory (default: LATTIGO_KEYS_DIR)')
-    parser.add_argument('--record-id', type=str, help='Record ID to retrieve (required with --retrieve-keys)')
+    parser.add_argument('--record-ids', type=str, nargs='+', help='Record IDs to retrieve (required with --retrieve-keys)')
 
     args = parser.parse_args()
 
     # Validate arguments
-    if args.record_id and not args.retrieve_keys:
-        parser.error("--record-id can only be used with --retrieve-keys")
-    if args.retrieve_keys and not args.record_id:
-        parser.error("--record-id is required when using --retrieve-keys")
+    if args.record_ids and not args.retrieve_keys:
+        parser.error("--record-ids can only be used with --retrieve-keys")
+    if args.retrieve_keys and not args.record_ids:
+        parser.error("--record-ids is required when using --retrieve-keys")
 
     if args.create_schema:
         asyncio.run(create_schema())
@@ -153,6 +179,11 @@ if __name__ == "__main__":
             secret_key_filename = f"{args.store_keys}/tfhe-client-key.b64"
             public_key_filename = f"{args.store_keys}/tfhe-server-key.b64"
             params_filename = None
+        elif "seal" in args.store_keys:
+            print(f"📤 Storing SEAL keys from directory: {args.store_keys}")
+            secret_key_filename = f"{args.store_keys}/seal-secret-key.b64"
+            public_key_filename = f"{args.store_keys}/seal-public-key.b64"
+            params_filename = f"{args.store_keys}/seal-params.b64"
         else:  # lattigo case
             print(f"📤 Storing Lattigo keys from directory: {args.store_keys}")
             secret_key_filename = f"{args.store_keys}/bgv-secret-key.b64"
@@ -168,6 +199,11 @@ if __name__ == "__main__":
             secret_key_filename = f"{args.retrieve_keys}/tfhe-client-key.b64"
             public_key_filename = f"{args.retrieve_keys}/tfhe-server-key.b64"
             params_filename = None
+        elif "seal" in args.retrieve_keys:
+            print(f"📥 Retrieving SEAL keys to directory: {args.retrieve_keys}")
+            secret_key_filename = f"{args.retrieve_keys}/seal-secret-key.b64"
+            public_key_filename = f"{args.retrieve_keys}/seal-public-key.b64"
+            params_filename = f"{args.retrieve_keys}/seal-params.b64"
         else:  # lattigo case
             print(f"📥 Retrieving Lattigo keys to directory: {args.retrieve_keys}")
             secret_key_filename = f"{args.retrieve_keys}/bgv-secret-key.b64"
@@ -176,7 +212,7 @@ if __name__ == "__main__":
 
         asyncio.run(read_write_keys(read=True, secret_key_filename=secret_key_filename,
                                   public_key_filename=public_key_filename, params_filename=params_filename,
-                                  record_id=args.record_id))
+                                  record_ids=args.record_ids))
     else:
         parser.print_help()
         sys.exit(1)
