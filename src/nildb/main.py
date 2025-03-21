@@ -67,44 +67,42 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
                     { "%allot": secret_key[i: i + 4096] }
                     for i in range(0, len(secret_key), 4096)
                 ]
-                print("secret_key length:", len(secret_key))
-            print("Loaded secret key")
+
             with open(public_key_filename, "r") as f:
                 public_key = f.read()
                 data["public_key"] = [
                     public_key[i: i + 4096]
                     for i in range(0, len(public_key), 4096)
                 ]
-                print("public_key length:", len(public_key))
             print("Loaded public key")
             if params_filename:
                 with open(params_filename, "r") as f:
                     parameters = f.read()
                     data["parameters"] = parameters
-                print("parameters length:", len(parameters))
-            print("Loaded parameters")
 
+            else:
+                data["parameters"] = ""
 
-            print([{k: len(v) for k, v in data.items()}])
             # Split data into n chunks of max_chunk_length
             max_data_len = max([len(v) for v in data.values()])
             records = [{k: v[i: i + max_chunk_length] for k, v in data.items()} for i in range(0, max_data_len, max_chunk_length)]
-
-            print([{k: len(v) for k, v in record.items()} for record in records])
-            data_written = await collection.write_to_nodes(records)
-            
-
-            # Extract unique created IDs from the results
-            new_ids = list(
-                {
-                    created_id
-                    for item in data_written
-                    if item.get("result")
-                    for created_id in item["result"]["data"]["created"]
-                }
-            )
             print("🔏 Created IDs:")
-            print("\n".join(new_ids))
+            for record in records:
+                data_written = await collection.write_to_nodes([record])
+                
+
+                # Extract unique created IDs from the results
+                new_ids = list(
+                    {
+                        created_id
+                        for item in data_written
+                        if item.get("result")
+                        for created_id in item["result"]["data"]["created"]
+                    }
+                )
+
+                print("".join(new_ids), end=" ")
+            print("")
         else:
             if not isinstance(record_ids, list):
                 record_ids = [record_ids]
@@ -128,11 +126,10 @@ async def read_write_keys(read=False, secret_key_filename=None, public_key_filen
                         data[k] = ""
                     data[k] += "".join(v)
 
-            print([{k: len(v) for k, v in data.items()}])
-
             # Write parameters to file
-            with open(params_filename, "w") as f:
-                f.write(data["parameters"])
+            if params_filename:
+                with open(params_filename, "w") as f:
+                    f.write(data["parameters"])
 
             # Write public key to file
             with open(public_key_filename, "w") as f:

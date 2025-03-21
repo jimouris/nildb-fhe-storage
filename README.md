@@ -74,10 +74,10 @@ The returned ID will look something like `8100e495-5168-40a5-be0e-91654ef6ee11`,
 To retrieve:
 ```shell
 # For Lattigo keys
-python main.py --retrieve-keys ../lattigo/keys --record-id 8100e495-5168-40a5-be0e-91654ef6ee11
+python main.py --retrieve-keys ../lattigo/keys --record-ids 8100e495-5168-40a5-be0e-91654ef6ee11
 # For TFHE-rs keys
-python main.py --retrieve-keys ../tfhe-rs/keys --record-id 8100e495-5168-40a5-be0e-91654ef6ee11
+python main.py --retrieve-keys ../tfhe-rs/keys --record-ids 8100e495-5168-40a5-be0e-91654ef6ee11
 # For SEAL keys
-python main.py --retrieve-keys ../seal/keys --record-id 8100e495-5168-40a5-be0e-91654ef6ee11
+python main.py --retrieve-keys ../seal/keys --record-ids 8100e495-5168-40a5-be0e-91654ef6ee11
 ```
 Finally, go back to Lattigo / TFHE-RS / SEAL and run it again, it'll find the FHE keys and not generate new ones.

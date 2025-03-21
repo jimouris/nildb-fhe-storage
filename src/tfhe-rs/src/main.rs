@@ -44,7 +44,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Deserialize keys
         let client_key = bincode::deserialize(&client_key_bytes)?;
         let server_keys = bincode::deserialize(&server_key_bytes)?;
-
+        println!("Client key length: {}", client_key_bytes.len());
+        println!("Server key length: {}", server_key_bytes.len());
         (client_key, server_keys)
     } else {
         println!("Generating new keys...");
@@ -68,9 +69,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut server_keys_file = File::create(server_key_filename)?;
         server_keys_file.write_all(server_keys_b64.as_bytes())?;
-
+        println!("Client key length: {}", client_key_bytes.len());
+        println!("Server key length: {}", server_keys_bytes.len());
         (client_key, server_keys)
     };
+
 
     let clear_a = 1344u32;
     let clear_b = 5u32;
